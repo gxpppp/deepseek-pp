@@ -5,6 +5,7 @@ import { estimateTokens, formatMemoriesBlock, getMemoryBudget, selectMemories } 
 export interface AugmentOptions {
   thinkingEnabled?: boolean;
   identityOnly?: boolean;
+  mcpPromptText?: string;
 }
 
 export function buildAugmentedPrompt(
@@ -12,7 +13,7 @@ export function buildAugmentedPrompt(
   allMemories: Memory[],
   options?: AugmentOptions,
 ): { augmented: string; usedMemoryIds: number[] } {
-  const { thinkingEnabled = false, identityOnly = false } = options ?? {};
+  const { thinkingEnabled = false, identityOnly = false, mcpPromptText = '' } = options ?? {};
 
   const promptTokens = estimateTokens(originalPrompt);
   const budget = getMemoryBudget(promptTokens);
@@ -21,7 +22,7 @@ export function buildAugmentedPrompt(
   const memBlock = formatMemoriesBlock(selected);
 
   const template = thinkingEnabled ? SYSTEM_TEMPLATE_THINKING : SYSTEM_TEMPLATE_CHAT;
-  const system = template.replace('{{memories}}', memBlock);
+  const system = template.replace('{{memories}}', memBlock) + (mcpPromptText ? '\n' + mcpPromptText : '');
 
   return {
     augmented: system + originalPrompt,

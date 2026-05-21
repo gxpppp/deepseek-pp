@@ -46,7 +46,9 @@ import { getBackgroundConfig, saveBackgroundConfig, clearBackgroundConfig } from
 import { getSyncConfig, saveSyncConfig } from '../core/sync/config';
 import { webdavTest, webdavMkcol, webdavGet, webdavPut } from '../core/sync/webdav-client';
 import { mergeMemories, mergeSkills, mergePresets } from '../core/sync/merge';
+import { getAllMCPServers, addMCPServer, updateMCPServer, deleteMCPServer } from '../core/mcp/config-store';
 import type { BackgroundConfig, Memory, ModelType, NewMemory, Skill, SyncConfig, SystemPromptPreset } from '../core/types';
+import type { NewMCPServerConfig } from '../core/mcp/types';
 import type {
   AutomationCreateInput,
   AutomationRun,
@@ -322,6 +324,29 @@ async function handleMessage(
       return { ok: true, lastSyncAt: now };
     }
 
+    case 'GET_MCP_SERVERS':
+      return getAllMCPServers();
+
+    case 'ADD_MCP_SERVER': {
+      const server = await addMCPServer(message.payload as NewMCPServerConfig);
+      await broadcastMCPConfigUpdate();
+      return server;
+    }
+
+    case 'UPDATE_MCP_SERVER': {
+      const { id, patch } = message.payload as { id: string; patch: Partial<NewMCPServerConfig> };
+      const updated = await updateMCPServer(id, patch);
+      if (updated) await broadcastMCPConfigUpdate();
+      return updated;
+    }
+
+    case 'DELETE_MCP_SERVER': {
+      const { id } = message.payload as { id: string };
+      await deleteMCPServer(id);
+      await broadcastMCPConfigUpdate();
+      return { ok: true };
+    }
+
     default:
       return null;
   }
@@ -353,6 +378,11 @@ async function broadcastStateUpdate(excludeTabId?: number) {
 
 async function broadcastBackgroundUpdate(config: BackgroundConfig | null) {
   await broadcastToTabs({ type: 'BACKGROUND_UPDATED', config });
+}
+
+async function broadcastMCPConfigUpdate(excludeTabId?: number) {
+  const servers = await getAllMCPServers();
+  await broadcastToTabs({ type: 'MCP_CONFIG_UPDATED', servers }, excludeTabId);
 }
 
 async function broadcastAutomationUpdate(excludeTabId?: number) {

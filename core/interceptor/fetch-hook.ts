@@ -1,4 +1,4 @@
-import { DEEPSEEK_API_URL, PRESET_REINJECTION_INTERVAL, TOOL_NAMES } from '../constants';
+import { DEEPSEEK_API_URL, PRESET_REINJECTION_INTERVAL, getToolNames } from '../constants';
 import type { Memory, ModelType, SystemPromptPreset, ToolCall, ToolCallRestoreRecord } from '../types';
 import { buildAugmentedPrompt } from '../memory/injector';
 import { parseSkillCommand } from '../skill/parser';
@@ -15,6 +15,7 @@ interface HookState {
   skills: Array<{ name: string; instructions: string; memoryEnabled: boolean }>;
   activePreset: SystemPromptPreset | null;
   modelType: ModelType;
+  mcpToolsPromptText: string;
   messageCount: number;
   onToolCall: (call: ToolCall) => void;
   onToolCallExecuted: (call: ToolCall) => Promise<{ ok: boolean; summary: string; detail?: string }>;
@@ -28,6 +29,7 @@ let hookState: HookState = {
   skills: [],
   activePreset: null,
   modelType: null,
+  mcpToolsPromptText: '',
   messageCount: 0,
   onToolCall: () => {},
   onToolCallExecuted: async () => ({ ok: true, summary: '' }),
@@ -140,12 +142,13 @@ function modifyRequestBody(bodyStr: string): string | null {
       const anyMemoryEnabled = resolved.memoryEnabled;
 
       if (anyMemoryEnabled) {
-        const { augmented } = buildAugmentedPrompt(prompt, hookState.memories, { thinkingEnabled });
+        const { augmented } = buildAugmentedPrompt(prompt, hookState.memories, { thinkingEnabled, mcpPromptText: hookState.mcpToolsPromptText });
         prompt = augmented;
       } else if (hookState.memories.length > 0) {
         const { augmented } = buildAugmentedPrompt(prompt, hookState.memories, {
           thinkingEnabled,
           identityOnly: true,
+          mcpPromptText: hookState.mcpToolsPromptText,
         });
         prompt = augmented;
       }
@@ -157,6 +160,7 @@ function modifyRequestBody(bodyStr: string): string | null {
 
   const { augmented, usedMemoryIds } = buildAugmentedPrompt(originalPrompt, hookState.memories, {
     thinkingEnabled,
+    mcpPromptText: hookState.mcpToolsPromptText,
   });
   body.prompt = presetPrefix + augmented;
 
@@ -213,12 +217,17 @@ function notifyNewToolCalls(fullText: string, alreadyNotified: number): number {
 
 // --- SSE stream interception: strip XML tool-call blocks from text events ---
 
-const TOOL_OPEN_TAGS = TOOL_NAMES.map(n => `<${n}>`);
-const TOOL_CLOSE_TAGS: Record<string, string> = Object.fromEntries(TOOL_NAMES.map(n => [n, `</${n}>`]));
+function getToolOpenTags(): string[] {
+  return getToolNames().map(n => `<${n}>`);
+}
+
+function getToolCloseTags(): Record<string, string> {
+  return Object.fromEntries(getToolNames().map(n => [n, `</${n}>`]));
+}
 
 function findFirstToolOpen(text: string): { idx: number; tool: string } | null {
   let best: { idx: number; tool: string } | null = null;
-  for (const tool of TOOL_NAMES) {
+  for (const tool of getToolNames()) {
     const open = `<${tool}>`;
     const idx = text.indexOf(open);
     if (idx >= 0 && (best === null || idx < best.idx)) {
@@ -229,7 +238,7 @@ function findFirstToolOpen(text: string): { idx: number; tool: string } | null {
 }
 
 function couldBePartialToolOpen(text: string): boolean {
-  for (const open of TOOL_OPEN_TAGS) {
+  for (const open of getToolOpenTags()) {
     const maxLen = Math.min(text.length, open.length - 1);
     for (let len = maxLen; len > 0; len--) {
       if (open.startsWith(text.slice(-len))) {
@@ -410,7 +419,7 @@ class XmlToolStreamFilter {
       if (this.state === 'SUPPRESSING') {
         const previousPendingLength = this.pendingText.length;
         this.pendingText += text;
-        const closeTag = TOOL_CLOSE_TAGS[this.currentTool!];
+        const closeTag = getToolCloseTags()[this.currentTool!];
         const closeIdx = this.pendingText.indexOf(closeTag);
         if (closeIdx !== -1) {
           const tailStart = closeIdx + closeTag.length;
@@ -451,7 +460,7 @@ class XmlToolStreamFilter {
 
     const found = findFirstToolOpen(this.pendingText);
     if (found) {
-      const closeTag = TOOL_CLOSE_TAGS[found.tool];
+      const closeTag = getToolCloseTags()[found.tool];
       const closeIdx = this.pendingText.indexOf(closeTag, found.idx + `<${found.tool}>`.length);
       const tailStart = closeIdx === -1 ? -1 : closeIdx + closeTag.length;
       const tailOffsetInCurrentText = tailStart - previousPendingLength;
@@ -765,8 +774,7 @@ function setupXHRHistoryInterceptor(xhr: XMLHttpRequest) {
 }
 
 function hasToolCallMarker(text: string): boolean {
-  // Check for any of our tool tags
-  for (const name of TOOL_NAMES) {
+  for (const name of getToolNames()) {
     if (text.includes(`<${name}>`) || text.includes(`</${name}>`)) {
       return true;
     }

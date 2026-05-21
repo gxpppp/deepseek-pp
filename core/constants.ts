@@ -8,8 +8,29 @@ export const MSG_PREFIX = 'DEEPSEEK_PP';
 
 export const DSML = '｜DSML｜';
 
-export const TOOL_NAMES = ['memory_save', 'memory_update', 'memory_delete'] as const;
-export type ToolName = typeof TOOL_NAMES[number];
+const BUILTIN_TOOL_NAMES = ['memory_save', 'memory_update', 'memory_delete'];
+const _extraToolNames: string[] = [];
+
+export function getToolNames(): readonly string[] {
+  return [...BUILTIN_TOOL_NAMES, ..._extraToolNames];
+}
+
+export function registerToolName(name: string): void {
+  if (!BUILTIN_TOOL_NAMES.includes(name) && !_extraToolNames.includes(name)) {
+    _extraToolNames.push(name);
+  }
+}
+
+export function unregisterToolName(name: string): void {
+  const idx = _extraToolNames.indexOf(name);
+  if (idx >= 0) _extraToolNames.splice(idx, 1);
+}
+
+export function buildToolCallRegex(): RegExp {
+  const names = getToolNames();
+  const escaped = names.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`<(${escaped.join('|')})>\\s*([\\s\\S]*?)\\s*<\\/\\1>`, 'g');
+}
 
 const MEMORY_SAVE_SCHEMA = '{"type": "function", "function": {"name": "memory_save", "description": "保存一条新的长期记忆", "parameters": {"type": "object", "properties": {"type": {"type": "string", "enum": ["user", "feedback", "topic", "reference"], "description": "记忆类型：user=身份角色偏好, feedback=行为纠正, topic=讨论要点, reference=外部资源链接"}, "name": {"type": "string", "description": "简短标题"}, "content": {"type": "string", "description": "要保存的内容"}, "tags": {"type": "array", "items": {"type": "string"}, "description": "标签列表"}}, "required": ["type", "name", "content", "tags"]}}}';
 
@@ -117,7 +138,6 @@ export const STOP_WORDS = new Set([
   'other', 'been', 'has', 'its', 'use', 'two', 'how', 'our', 'way',
 ]);
 
-// XML-style tool call regex: <tool_name>JSON</tool_name>
-export const TOOL_CALL_REGEX = /<(memory_save|memory_update|memory_delete)>\s*([\s\S]*?)\s*<\/\1>/g;
+export const TOOL_CALL_REGEX = buildToolCallRegex();
 
 export const SKILL_TRIGGER_REGEX = /^\/(\S+)\s*([\s\S]*)$/;

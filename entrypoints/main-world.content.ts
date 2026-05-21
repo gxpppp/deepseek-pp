@@ -1,6 +1,9 @@
 import { installFetchHook, updateHookState } from '../core/interceptor/fetch-hook';
 import { initSkillPopup } from '../core/ui/skill-popup';
 import type { Memory, ModelType, Skill, SystemPromptPreset, ToolCall, ToolCallRestoreRecord } from '../core/types';
+import type { MCPToolDescriptor } from '../core/mcp/types';
+import { generateMCPSystemPromptSection } from '../core/mcp/tool-converter';
+import { registerToolName, unregisterToolName, getToolNames } from '../core/constants';
 import {
   AUTOMATION_WINDOW_RUN_RESULT,
   MAIN_WORLD_WINDOW_SOURCE,
@@ -84,6 +87,20 @@ export default defineContentScript({
           };
           updateHookState({ memories, skills, activePreset, modelType });
           initSkillPopup(skills);
+          break;
+        }
+        case 'MCP_TOOLS_UPDATED': {
+          const descriptors = event.data.descriptors as MCPToolDescriptor[];
+          const promptText = generateMCPSystemPromptSection(descriptors);
+
+          const hasMcpTools = descriptors.some((d) => d.tools.length > 0);
+          if (hasMcpTools && !getToolNames().includes('mcp')) {
+            registerToolName('mcp');
+          } else if (!hasMcpTools) {
+            unregisterToolName('mcp');
+          }
+
+          updateHookState({ mcpToolsPromptText: promptText });
           break;
         }
       }

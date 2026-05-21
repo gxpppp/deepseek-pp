@@ -1,4 +1,4 @@
-import { TOOL_CALL_REGEX } from '../constants';
+import { buildToolCallRegex } from '../constants';
 import type { ToolCall } from '../types';
 
 const LEGACY_TOOL_CALLS_BLOCK_REGEX = /<｜DSML｜tool_calls>\s*[\s\S]*?\s*<\/｜DSML｜tool_calls>/g;
@@ -14,7 +14,7 @@ export function extractToolCalls(text: string): ToolCall[] {
 
 function extractXmlToolCalls(text: string): ToolCall[] {
   const calls: ToolCall[] = [];
-  const regex = new RegExp(TOOL_CALL_REGEX.source, 'g');
+  const regex = buildToolCallRegex();
   let match: RegExpExecArray | null;
 
   while ((match = regex.exec(text)) !== null) {
@@ -76,13 +76,13 @@ function extractLegacyToolCalls(text: string): ToolCall[] {
 }
 
 export function stripToolCalls(text: string): string {
-  const regex = new RegExp(TOOL_CALL_REGEX.source, 'g');
+  const regex = buildToolCallRegex();
   const legacyRegex = new RegExp(LEGACY_TOOL_CALLS_BLOCK_REGEX.source, 'g');
   return text.replace(regex, '').replace(legacyRegex, '').trim();
 }
 
 export function replaceToolCallsWithSummary(text: string): string {
-  const regex = new RegExp(TOOL_CALL_REGEX.source, 'g');
+  const regex = buildToolCallRegex();
   const legacyRegex = new RegExp(LEGACY_TOOL_CALLS_BLOCK_REGEX.source, 'g');
   return text.replace(regex, replaceMatchWithSummary).replace(legacyRegex, replaceMatchWithSummary);
 }

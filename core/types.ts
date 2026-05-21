@@ -157,7 +157,12 @@ export type MessageAction =
   | { type: 'SAVE_SYNC_CONFIG'; payload: SyncConfig }
   | { type: 'GET_BACKGROUND' }
   | { type: 'SAVE_BACKGROUND'; payload: BackgroundConfig }
-  | { type: 'CLEAR_BACKGROUND' };
+  | { type: 'CLEAR_BACKGROUND' }
+  | { type: 'GET_MCP_SERVERS' }
+  | { type: 'ADD_MCP_SERVER'; payload: import('./mcp/types').NewMCPServerConfig }
+  | { type: 'UPDATE_MCP_SERVER'; payload: { id: string; patch: Partial<import('./mcp/types').NewMCPServerConfig> } }
+  | { type: 'DELETE_MCP_SERVER'; payload: { id: string } }
+  | { type: 'MCP_TOOLS_UPDATED'; payload: import('./mcp/types').MCPToolDescriptor[] };
 
 export interface PromptConfig {
   memoryTokenBudget: number;

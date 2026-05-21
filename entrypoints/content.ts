@@ -9,7 +9,7 @@ import type {
   ToolCallRestoreRecord,
   ToolExecutionRecord,
 } from '../core/types';
-import { TOOL_NAMES } from '../core/constants';
+import { getToolNames } from '../core/constants';
 import { normalizeBackgroundConfig } from '../core/background/config';
 import { stripToolCalls } from '../core/interceptor/tool-parser';
 import {
@@ -21,13 +21,25 @@ import {
   isAutomationWindowRunResultMessage,
 } from '../core/automation/messages';
 import type { AutomationRunnerRequest, AutomationRunnerResult } from '../core/automation/types';
+import { MCPClient } from '../core/mcp/mcp-client';
+import { executeMCPToolCall, getAllConnectedMCPServers } from '../core/mcp/tool-executor';
+import type { MCPToolCallPayload, MCPServerConfig, MCPToolDescriptor } from '../core/mcp/types';
 
 const TOOL_BLOCK_ID = 'dpp-tool-block';
 const TOOL_BLOCK_STYLE_ID = 'dpp-tool-block-css';
 const TOOL_RESTORE_STORAGE_KEY = 'dpp_tool_execution_blocks';
-const TOOL_TAG_PATTERN = TOOL_NAMES.map(escapeRegExp).join('|');
-const TOOL_OPEN_TAG_RE = new RegExp(`<\\s*(${TOOL_TAG_PATTERN})\\s*>`, 'i');
-const TOOL_MARKER_RE = new RegExp(`<\\s*/?\\s*(?:${TOOL_TAG_PATTERN})\\s*>`, 'i');
+
+function getToolTagPattern(): string {
+  return getToolNames().map(escapeRegExp).join('|');
+}
+
+function getToolOpenTagRE(): RegExp {
+  return new RegExp(`<\\s*(${getToolTagPattern()})\\s*>`, 'i');
+}
+
+function getToolMarkerRE(): RegExp {
+  return new RegExp(`<\\s*/?\\s*(?:${getToolTagPattern()})\\s*>`, 'i');
+}
 
 interface PersistedToolBlock extends ToolCallRestoreRecord {
   source: 'storage';
@@ -107,6 +119,7 @@ export default defineContentScript({
     syncToMainWorld(memories ?? [], skills ?? [], activePreset, modelType);
     startRenderedToolCallCleaner();
     void restorePersistedToolBlocks();
+    void initMCPClients();
 
     chrome.runtime.sendMessage({ type: 'GET_BACKGROUND' }).then((cfg: BackgroundConfig | null) => {
       applyBackground(cfg);
@@ -134,6 +147,8 @@ export default defineContentScript({
         syncToMainWorld(message.memories, message.skills, message.activePreset, message.modelType);
       } else if (message.type === 'BACKGROUND_UPDATED') {
         applyBackground(message.config as BackgroundConfig | null);
+      } else if (message.type === 'MCP_CONFIG_UPDATED') {
+        void initMCPClients();
       }
       return undefined;
     });
@@ -208,6 +223,32 @@ function syncToMainWorld(memories: Memory[], skills: Skill[], activePreset: Syst
     skills,
     activePreset,
     modelType,
+  });
+}
+
+async function initMCPClients() {
+  const servers = await chrome.runtime.sendMessage({ type: 'GET_MCP_SERVERS' }) as MCPServerConfig[];
+  if (!servers || servers.length === 0) return;
+
+  for (const config of servers) {
+    if (!config.enabled) continue;
+    const client = new MCPClient(config);
+    client.setOnStateChange(() => syncMCPToolsToMainWorld());
+    try {
+      await client.connect();
+    } catch {
+      // Connection failure handled by transport reconnection
+    }
+  }
+  syncMCPToolsToMainWorld();
+}
+
+function syncMCPToolsToMainWorld() {
+  const descriptors: MCPToolDescriptor[] = getAllConnectedMCPServers();
+  window.postMessage({
+    source: 'deepseek-pp-content',
+    type: 'MCP_TOOLS_UPDATED',
+    descriptors,
   });
 }
 
@@ -363,6 +404,11 @@ async function executeToolCall(call: ToolCall): Promise<ToolCardResult> {
       if (!id) return { ok: false, summary: '无效 ID' };
       await chrome.runtime.sendMessage({ type: 'DELETE_MEMORY', payload: { id } });
       return { ok: true, summary: '已删除', detail: `#${id}` };
+    }
+
+    if (call.name === 'mcp') {
+      const payload = call.payload as unknown as MCPToolCallPayload;
+      return executeMCPToolCall(payload);
     }
 
     return { ok: true, summary: '已识别' };
@@ -673,7 +719,7 @@ function mutationMayContainToolMarker(mutation: MutationRecord): boolean {
 }
 
 function containsToolMarker(text: string | null | undefined): boolean {
-  return typeof text === 'string' && TOOL_MARKER_RE.test(text);
+  return typeof text === 'string' && getToolMarkerRE().test(text);
 }
 
 function cleanRenderedToolCalls() {
@@ -749,7 +795,7 @@ function stripToolCallTextNodes(root: Element) {
         continue;
       }
 
-      const openMatch = TOOL_OPEN_TAG_RE.exec(original.slice(cursor));
+      const openMatch = getToolOpenTagRE().exec(original.slice(cursor));
       if (!openMatch) {
         next += original.slice(cursor);
         break;

@@ -1,6 +1,6 @@
 # DeepSeek++
 
-为 [DeepSeek](https://chat.deepseek.com) 网页版注入 **类原生工具调用**、**Agentic 记忆系统**、**Skill 技能系统**、**系统提示词预设** 和 **自动化任务** 的 Chrome 扩展。
+为 [DeepSeek](https://chat.deepseek.com) 网页版注入 **类原生工具调用**、**Agentic 记忆系统**、**Skill 技能系统**、**系统提示词预设**、**自动化任务** 和 **MCP 外部工具** 的 Chrome 扩展。
 
 让 DeepSeek 像支持原生 tools 一样自动执行记忆保存、更新、删除等动作，拥有跨对话长期记忆，并通过 `/skill` 指令一键切换专家模式；也可以像 Codex 自动化一样，把固定 prompt 放进独立会话里立即运行或按计划重复执行。
 
@@ -75,22 +75,34 @@
 - 运行超时后不会自动重复发送同一条 prompt，避免 DeepSeek 页面仍在执行时产生重复消息
 - 从源码更新后需要在 Chrome 扩展管理页重新加载 `dist/chrome-mv3/`，再验证侧边栏「自动化」页
 
+### MCP 外部工具
+
+- **Model Context Protocol** — 支持连接远程 MCP Server（SSE/HTTP），将外部工具能力注入 DeepSeek 对话
+- **标准化配置** — 支持 Claude Desktop / Cursor / VS Code 标准的 `mcpServers` JSON 格式导入导出
+- **自动工具发现** — 连接后自动通过 `tools/list` 发现可用工具，动态注册到 prompt 中
+- **统一工具调用** — MCP 工具使用 `<mcp>{"server":"...","tool":"...","arguments":{...}}</mcp>` 格式，与内置记忆工具共享同一条 SSE 拦截链路
+- **侧边栏管理** — 查看 Server 连接状态、已发现工具列表、添加/编辑/删除 Server 配置
+- **stdio 配置记录** — 支持记录 stdio 类型配置（`command` + `args`），为后续 Native Messaging 本地代理预留
+
+> **注意：** 浏览器扩展受沙箱限制，仅支持远程 MCP Server（SSE/HTTP）。本地 stdio Server 需配合 Native Messaging 桥接代理使用。
+
 ### 工作原理
 
 扩展在 main world 中拦截 `fetch` 和 `XMLHttpRequest`，在请求发送到 DeepSeek API 前修改 prompt（注入预设、记忆、技能指令和工具 schema），并解析 SSE 响应流以提取、隐藏和执行工具调用。
 
 ```
-用户输入 → 拦截请求 → 注入预设 + 记忆 + 技能指令 + tools schema → DeepSeek API
-                                                                    ↓
-页面折叠区块 ← 执行结果持久化 ← Content Script 执行工具 ← SSE 流式解析/隐藏工具调用
-       ↓
-侧边栏 ← IndexedDB/Storage ← 记忆保存/更新/删除
+用户输入 → 拦截请求 → 注入预设 + 记忆 + 技能指令 + tools schema + MCP 工具 → DeepSeek API
+                                                                              ↓
+    页面折叠区块 ← 执行结果持久化 ← Content Script 执行工具 ← SSE 流式解析/隐藏工具调用
+           ↓                                        ↓
+    侧边栏 ← IndexedDB/Storage               MCP Server ← SSE/HTTP
+    记忆/技能/预设/自动化/MCP 管理          (外部工具执行)
 ```
 
 工具调用链路分为三层：
 
-1. **Main World**：拦截网络请求和响应流，收集完整回复，识别 XML 工具块，过滤页面可见文本。
-2. **Content Script**：接收工具调用，执行记忆增删改，渲染「已执行工具」折叠区块，并恢复刷新后的执行状态。
+1. **Main World**：拦截网络请求和响应流，收集完整回复，识别 XML 工具块（含 `<mcp>`），过滤页面可见文本。
+2. **Content Script**：接收工具调用，执行记忆增删改与 MCP 外部工具调用，渲染「已执行工具」折叠区块，并恢复刷新后的执行状态。
 3. **Background**：统一处理 `SAVE_MEMORY`、`UPDATE_MEMORY`、`DELETE_MEMORY` 等消息，持久化数据并广播状态更新。
 
 ## 安装
@@ -138,13 +150,14 @@ core/
 ├── skill/                # 技能系统（内置技能、解析器、注册表）
 ├── preset/               # 系统提示词预设（存储、激活管理）
 ├── automation/           # 自动化任务（存储、调度、DeepSeek runner、桥接协议）
+├── mcp/                  # MCP 客户端（JSON-RPC、SSE transport、工具发现/执行、配置管理）
 └── ui/                   # 技能自动补全弹窗
 
 entrypoints/
 ├── background.ts         # Service Worker（消息路由、数据持久化）
-├── content.ts            # Content Script（DOM 集成、工具执行、结果区块恢复）
-├── main-world.content.ts # Main World 脚本（网络拦截、工具调用桥接）
-└── sidepanel/            # 侧边栏 React 应用（记忆/技能/预设/自动化/设置页面）
+├── content.ts            # Content Script（DOM 集成、工具执行、MCP 客户端初始化）
+├── main-world.content.ts # Main World 脚本（网络拦截、工具调用桥接、MCP 工具注册）
+└── sidepanel/            # 侧边栏 React 应用（记忆/技能/预设/自动化/MCP/设置页面）
 ```
 
 ## 友情链接

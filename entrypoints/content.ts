@@ -22,7 +22,7 @@ import {
 } from '../core/automation/messages';
 import type { AutomationRunnerRequest, AutomationRunnerResult } from '../core/automation/types';
 import { MCPClient } from '../core/mcp/mcp-client';
-import { executeMCPToolCall, getAllConnectedMCPServers } from '../core/mcp/tool-executor';
+import { executeMCPToolCall, getAllConnectedMCPServers, registerMCPClient, removeAllMCPServers } from '../core/mcp/tool-executor';
 import type { MCPToolCallPayload, MCPServerConfig, MCPToolDescriptor } from '../core/mcp/types';
 
 const TOOL_BLOCK_ID = 'dpp-tool-block';
@@ -227,13 +227,17 @@ function syncToMainWorld(memories: Memory[], skills: Skill[], activePreset: Syst
 }
 
 async function initMCPClients() {
+  removeAllMCPServers();
+
   const servers = await chrome.runtime.sendMessage({ type: 'GET_MCP_SERVERS' }) as MCPServerConfig[];
   if (!servers || servers.length === 0) return;
 
   for (const config of servers) {
     if (!config.enabled) continue;
+    if (config.transport === 'stdio') continue;
     const client = new MCPClient(config);
     client.setOnStateChange(() => syncMCPToolsToMainWorld());
+    registerMCPClient(client);
     try {
       await client.connect();
     } catch {

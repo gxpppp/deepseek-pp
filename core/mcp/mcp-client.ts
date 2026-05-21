@@ -50,16 +50,16 @@ export class MCPClient {
   }
 
   private async initialize(): Promise<void> {
-    const result = await this.transport.sendRequest('initialize', {
+    await this.transport.sendRequest('initialize', {
       protocolVersion: '2024-11-05',
       capabilities: {},
       clientInfo: {
         name: 'deepseek-pp',
         version: '0.1.0',
       },
-    }) as MCPInitializeResult;
+    });
 
-    await this.transport.sendRequest('notifications/initialized', {});
+    this.transport.sendNotification('notifications/initialized', {});
 
     await this.discoverTools();
   }

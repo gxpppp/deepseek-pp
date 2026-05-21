@@ -41,8 +41,16 @@ export function removeAllMCPServers(): void {
   }
 }
 
+function findClient(identifier: string): MCPClient | undefined {
+  const byId = clients.get(identifier);
+  if (byId) return byId;
+  return Array.from(clients.values()).find(
+    (c) => c.config.name === identifier,
+  );
+}
+
 export async function executeMCPToolCall(payload: MCPToolCallPayload): Promise<ToolCardResult> {
-  const client = clients.get(payload.server);
+  const client = findClient(payload.server);
   if (!client) {
     return {
       ok: false,

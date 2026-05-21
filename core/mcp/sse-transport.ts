@@ -157,25 +157,43 @@ export class SSETransport {
 
       this.pending.set(request.id, { resolve, reject, timeout });
 
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (this.authToken) {
-        headers['Authorization'] = `Bearer ${this.authToken}`;
-      }
+      this.postMessage(request);
+    });
+  }
 
-      fetch(this.messageUrl!, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(request),
-      }).catch((err) => {
-        const pending = this.pending.get(request.id);
+  sendNotification(method: string, params?: Record<string, unknown>): void {
+    if (!this.messageUrl) return;
+    const notification = {
+      jsonrpc: '2.0' as const,
+      method,
+      params,
+    };
+    this.postMessage(notification);
+  }
+
+  private postMessage(msg: unknown): void {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (this.authToken) {
+      headers['Authorization'] = `Bearer ${this.authToken}`;
+    }
+
+    fetch(this.messageUrl!, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(msg),
+    }).catch((err) => {
+      const req = msg as { id?: unknown };
+      const reqId = req.id as number | string | undefined;
+      if (reqId !== undefined) {
+        const pending = this.pending.get(reqId);
         if (pending) {
-          this.pending.delete(request.id);
+          this.pending.delete(reqId);
           clearTimeout(pending.timeout);
-          reject(err);
+          pending.reject(err);
         }
-      });
+      }
     });
   }
 

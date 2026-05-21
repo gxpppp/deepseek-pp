@@ -88,8 +88,9 @@ gh issue list -R zhu1090093659/deepseek-pp --label "spec-driven" --state all --j
 
 ### Next Steps
 
-1. Keep monitoring DeepSeek web API drift during regular use.
-2. If DeepSeek changes auth, PoW, model type, session creation, or message ID shape again, reopen compatibility work under a new issue.
+1. Test MCP integration with a live remote MCP Server (e.g., Tavily Search, Fetch).
+2. Implement Native Messaging bridge for local stdio MCP Server support.
+3. Keep monitoring DeepSeek web API drift during regular use.
 
 ### Session Log
 
@@ -110,3 +111,6 @@ gh issue list -R zhu1090093659/deepseek-pp --label "spec-driven" --state all --j
 | 2026-05-21 | T5.2 follow-up | Fixed `model_type` deserialization failure by changing the automation default from `chat` to DeepSeek's accepted `default`, mapping legacy saved values to `default` or `expert`, and limiting UI model choices to accepted variants. Verified `npm run compile` + `npm run build`. |
 | 2026-05-21 | T5.2 follow-up | Fixed continuation failure where `parent_message_id` was replayed as a string. Automation now stores and sends DeepSeek message IDs as u32 numbers while migrating existing numeric-string storage on read. Verified `npm run compile` + `npm run build`. |
 | 2026-05-21 | T5.2 closeout | User confirmed live automation works after reloading the updated extension. Closed Issue #15, completed Phase 5, and closed all spec-driven milestones. |
+| 2026-05-21 | MCP Phase 1 | Created `core/mcp/` module (7 files): types, JSON-RPC 2.0 helpers, SSE transport with auto-reconnect, config-store for chrome.storage persistence, MCP client (initialize → tools/list → tools/call), tool schema→prompt converter, tool executor. Dynamic tool name registry in `constants.ts` supporting runtime `registerToolName('mcp')`. |
+| 2026-05-21 | MCP Phase 2-3 | Integrated MCP into interceptor pipeline: `fetch-hook.ts` injects MCP tool descriptions into prompts, SSE filter dynamically adapts to registered tool names, `tool-parser.ts` uses `buildToolCallRegex()` for dynamic matching. Content script routes `<mcp>` payloads to `executeMCPToolCall()`. Background handles GET/ADD/UPDATE/DELETE MCP server configs. Main-world bridge syncs MCP tools and registers 'mcp' tool name on demand. |
+| 2026-05-21 | MCP Phase 4 | Added MCP sidebar management page (`MCPPage.tsx`) with server CRUD, import/export for Claude Desktop / Cursor / VS Code standard `mcpServers` JSON format, dual-mode form (SSE/HTTP URL + stdio command/args), transport type badges, connection status. Extended `MCPServerConfig` to support `transport: 'sse' \| 'http' \| 'stdio'` with backward compatibility. `npm run compile` + `npm run build` pass. Pushed to `feature/mcp` branch. |

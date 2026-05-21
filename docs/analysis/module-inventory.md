@@ -11,7 +11,8 @@
 | Skill system | Built-in/custom skill registry and slash parser | Chrome storage, builtin data | 3 | 297 | Medium | S yellow, U green, P yellow, E yellow, R yellow |
 | Preset/model/background stores | Lightweight config persistence | Chrome storage | 3 | 89 | Low | S green, U green, P yellow, E yellow, R yellow |
 | Sync system | WebDAV config/client/merge | Fetch, Chrome permissions, core types | 3 | 122 | Medium | S green, U green, P green, E yellow, R green |
-| Side panel UI | React management UI for memory/skill/preset/settings | Chrome runtime messages, components | 16 | 1837 | High | S yellow, U green, P yellow, E yellow, R yellow |
+| MCP integration | MCP client, SSE transport, tool discovery, execution, config store | Core types, fetch, Chrome storage | 7 | 810 | High | S green, U green, P green, E yellow, R green |
+| Side panel UI | React management UI for memory/skill/preset/mcp/settings | Chrome runtime messages, components | 17 | 2242 | High | S yellow, U green, P yellow, E yellow, R yellow |
 | Shared types/messaging/constants | Cross-module data contracts and endpoint constants | None / Chrome runtime | 3 | 288 | Medium | S yellow, U green, P yellow, E yellow, R yellow |
 
 > S.U.P.E.R scoring uses green/yellow/red words to keep the files ASCII-friendly.

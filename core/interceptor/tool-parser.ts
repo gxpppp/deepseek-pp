@@ -103,6 +103,15 @@ function formatToolName(name: string): string {
     case 'memory_save': return '保存记忆';
     case 'memory_update': return '更新记忆';
     case 'memory_delete': return '删除记忆';
+    case 'skill_create': return '创建技能';
+    case 'skill_delete': return '删除技能';
+    case 'preset_create': return '创建预设';
+    case 'preset_delete': return '删除预设';
+    case 'preset_activate': return '激活预设';
+    case 'mcp_add_server': return '添加 MCP';
+    case 'mcp_delete_server': return '删除 MCP';
+    case 'model_switch': return '切换模型';
+    case 'mcp': return 'MCP 工具';
     default: return name;
   }
 }

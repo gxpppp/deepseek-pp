@@ -410,6 +410,90 @@ async function executeToolCall(call: ToolCall): Promise<ToolCardResult> {
       return { ok: true, summary: '已删除', detail: `#${id}` };
     }
 
+    if (call.name === 'skill_create') {
+      const p = call.payload as { name?: string; description?: string; instructions?: string; memoryEnabled?: boolean };
+      if (!p.name?.trim()) return { ok: false, summary: '缺少技能名称' };
+      await chrome.runtime.sendMessage({ type: 'SAVE_SKILL', payload: { name: p.name.trim(), description: p.description || '', instructions: p.instructions || '', source: 'custom', memoryEnabled: p.memoryEnabled ?? true } });
+      return { ok: true, summary: '技能已创建', detail: p.name };
+    }
+
+    if (call.name === 'skill_delete') {
+      const p = call.payload as { name?: string };
+      if (!p.name?.trim()) return { ok: false, summary: '缺少技能名称' };
+      await chrome.runtime.sendMessage({ type: 'DELETE_SKILL', payload: { name: p.name.trim() } });
+      return { ok: true, summary: '技能已删除', detail: p.name };
+    }
+
+    if (call.name === 'preset_create') {
+      const p = call.payload as { name?: string; content?: string };
+      if (!p.name?.trim()) return { ok: false, summary: '缺少预设名称' };
+      const now = Date.now();
+      const id = `preset_${now}_${Math.random().toString(36).slice(2, 6)}`;
+      await chrome.runtime.sendMessage({ type: 'SAVE_PRESET', payload: { id, name: p.name.trim(), content: p.content || '', createdAt: now, updatedAt: now } });
+      return { ok: true, summary: '预设已创建', detail: p.name };
+    }
+
+    if (call.name === 'preset_delete') {
+      const p = call.payload as { name?: string };
+      if (!p.name?.trim()) return { ok: false, summary: '缺少预设名称' };
+      const presets: import('../core/types').SystemPromptPreset[] = await chrome.runtime.sendMessage({ type: 'GET_PRESETS' });
+      const target = presets?.find((pr) => pr.name === p.name);
+      if (!target) return { ok: false, summary: '预设不存在', detail: p.name };
+      await chrome.runtime.sendMessage({ type: 'DELETE_PRESET', payload: { id: target.id } });
+      return { ok: true, summary: '预设已删除', detail: p.name };
+    }
+
+    if (call.name === 'preset_activate') {
+      const p = call.payload as { name?: string };
+      if (!p.name) {
+        await chrome.runtime.sendMessage({ type: 'SET_ACTIVE_PRESET', payload: { id: null } });
+        return { ok: true, summary: '已取消激活预设' };
+      }
+      const presets: import('../core/types').SystemPromptPreset[] = await chrome.runtime.sendMessage({ type: 'GET_PRESETS' });
+      const target = presets?.find((pr) => pr.name === p.name);
+      if (!target) return { ok: false, summary: '预设不存在', detail: p.name };
+      await chrome.runtime.sendMessage({ type: 'SET_ACTIVE_PRESET', payload: { id: target.id } });
+      return { ok: true, summary: '已激活预设', detail: p.name };
+    }
+
+    if (call.name === 'mcp_add_server') {
+      const p = call.payload as { name?: string; transport?: string; url?: string; authToken?: string; command?: string; args?: string };
+      if (!p.name?.trim()) return { ok: false, summary: '缺少服务器名称' };
+      const transport = (p.transport || 'sse') as 'sse' | 'http' | 'stdio';
+      await chrome.runtime.sendMessage({
+        type: 'ADD_MCP_SERVER',
+        payload: {
+          name: p.name.trim(),
+          transport,
+          url: p.url || undefined,
+          authToken: p.authToken || undefined,
+          command: p.command || undefined,
+          args: p.args ? p.args.split(/\s+/) : undefined,
+          enabled: true,
+        },
+      });
+      void initMCPClients();
+      return { ok: true, summary: 'MCP 服务器已添加', detail: p.name };
+    }
+
+    if (call.name === 'mcp_delete_server') {
+      const p = call.payload as { name?: string };
+      if (!p.name?.trim()) return { ok: false, summary: '缺少服务器名称' };
+      const servers: import('../core/mcp/types').MCPServerConfig[] = await chrome.runtime.sendMessage({ type: 'GET_MCP_SERVERS' });
+      const target = servers?.find((s) => s.name === p.name);
+      if (!target) return { ok: false, summary: '服务器不存在', detail: p.name };
+      await chrome.runtime.sendMessage({ type: 'DELETE_MCP_SERVER', payload: { id: target.id } });
+      void initMCPClients();
+      return { ok: true, summary: 'MCP 服务器已删除', detail: p.name };
+    }
+
+    if (call.name === 'model_switch') {
+      const p = call.payload as { type?: string };
+      const modelType = p.type === 'expert' ? 'expert' : null;
+      await chrome.runtime.sendMessage({ type: 'SET_MODEL_TYPE', payload: modelType });
+      return { ok: true, summary: '模型已切换', detail: p.type === 'expert' ? '专家模式' : '普通模式' };
+    }
+
     if (call.name === 'mcp') {
       const payload = call.payload as unknown as MCPToolCallPayload;
       return executeMCPToolCall(payload);
